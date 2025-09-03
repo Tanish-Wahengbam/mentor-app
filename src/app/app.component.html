@@ -1,5 +1,4 @@
 <div class="app-container">
-
   <!-- Sidebar -->
   <div class="sidebar" [class.sidebar-closed]="!sidenavOpen">
     <!-- Sidebar Header -->
@@ -14,13 +13,15 @@
 
     <!-- Navigation Menu -->
     <nav class="nav-menu">
-      <div class="nav-item" [class.active]="activeTool==='tasks'" (click)="activeTool='tasks'" [title]="!sidenavOpen ? 'Tasks' : ''">
+      <div class="nav-item" [class.active]="activeTool==='tasks'" (click)="activeTool='tasks'"
+        [title]="!sidenavOpen ? 'Tasks' : ''">
         <div class="nav-icon">
           <span class="icon">✅</span>
         </div>
         <span class="nav-text" *ngIf="sidenavOpen">Tasks</span>
       </div>
-      <div class="nav-item" [class.active]="activeTool==='calendar'" (click)="activeTool='calendar'" [title]="!sidenavOpen ? 'Calendar' : ''">
+      <div class="nav-item" [class.active]="activeTool==='calendar'" (click)="activeTool='calendar'"
+        [title]="!sidenavOpen ? 'Calendar' : ''">
         <div class="nav-icon">
           <span class="icon">📅</span>
         </div>
@@ -85,174 +86,367 @@
                 <span class="assignee" *ngIf="task.assignee">{{ task.assignee }}</span>
               </div>
             </div>
-
           </div>
 
           <button class="add-task-btn" (click)="openNewTaskModal(column)">+ Add Task</button>
         </div>
       </div>
+    </div>
 
-      <!-- Task Modal (same as before) -->
-      <div class="modal" *ngIf="showTaskModal">
-        <div class="modal-content">
-          <h2>{{ editingTask ? 'Edit task' : 'Create task' }}</h2>
+    <div *ngIf="activeTool==='calendar'" class="kanban-container">
+      <app-calendar></app-calendar>
+    </div>
+  </div>
 
-          <form [formGroup]="taskForm" (ngSubmit)="saveTask()" class="task-form-grid">
-            <div class="left-col">
-              <div class="form-group">
-                <input type="text" formControlName="title" placeholder="Task name" />
-                <div class="validation-error" *ngIf="taskForm.get('title')?.invalid && taskForm.get('title')?.touched">
-                  Title is required (min 3 characters)
-                </div>
+  <!-- Add New Task Modal (for creating new tasks) -->
+  <div class="modal" *ngIf="showTaskModal && !editingTask">
+    <div class="modal-content">
+      <h2>Create task</h2>
+
+      <form [formGroup]="taskForm" (ngSubmit)="saveTask()" class="task-form-grid">
+        <div class="left-col">
+          <div class="form-group">
+            <input type="text" formControlName="title" placeholder="Task name" />
+            <div class="validation-error" *ngIf="taskForm.get('title')?.invalid && taskForm.get('title')?.touched">
+              Title is required (min 3 characters)
+            </div>
+          </div>
+
+          <div class="form-group">
+            <textarea formControlName="description" placeholder="Task description" rows="8"></textarea>
+            <div class="validation-error"
+              *ngIf="taskForm.get('description')?.invalid && taskForm.get('description')?.touched">
+              Description must be at least 10 characters
+            </div>
+          </div>
+
+          <div class="left-actions">
+            <button type="button" (click)="closeTaskModal()">Cancel</button>
+            <button type="submit" [disabled]="taskForm.invalid">Create task</button>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="form-group" *ngIf="!currentColumn">
+            <label>Status</label>
+            <select formControlName="statusId">
+              <option *ngFor="let c of columns" [value]="c.id">{{ c.title }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Type</label>
+            <div class="type-selector" (click)="toggleTypeDropdown()">
+              <div class="selected-type" [style.background-color]="getSelectedTaskType().color">
+                {{ getSelectedTaskType().name }}
+                <span class="dropdown-arrow">▼</span>
               </div>
 
-              <div class="form-group">
-                <textarea formControlName="description" placeholder="Task description" rows="8"></textarea>
-                <div class="validation-error"
-                  *ngIf="taskForm.get('description')?.invalid && taskForm.get('description')?.touched">
-                  Description must be at least 10 characters
+              <!-- Type Dropdown -->
+              <div class="type-dropdown" *ngIf="showTypeDropdown">
+                <div class="type-option" *ngFor="let type of getEnabledTaskTypes()" (click)="selectTaskType(type)"
+                  [style.background-color]="type.color">
+                  {{ type.name }}
+                </div>
+
+                <div class="edit-types-option" (click)="openEditTypesModal()">
+                  <span class="edit-icon">⚙</span>
+                  Edit types
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div class="left-actions">
-                <button type="button" (click)="closeTaskModal()">Cancel</button>
-                <button type="submit" [disabled]="taskForm.invalid">
-                  {{ editingTask ? 'Save changes' : 'Create task' }}
+          <div class="form-group">
+            <label>Assignee</label>
+            <input type="text" formControlName="assignee" placeholder="Me" />
+            <div class="validation-error"
+              *ngIf="taskForm.get('assignee')?.invalid && taskForm.get('assignee')?.touched">
+              Assignee name must be between 2 and 50 characters
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Schedule</label>
+              <input type="date" formControlName="scheduleDate" />
+            </div>
+            <!-- <div class="form-group">
+              <label>Estimated time</label>
+              <input type="number" min="0" formControlName="estimatedTimeHours" placeholder="0h" />
+            </div> -->
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Due date</label>
+              <input type="date" formControlName="dueDate" />
+              <div class="validation-error"
+                *ngIf="taskForm.get('dueDate')?.invalid && taskForm.get('dueDate')?.touched">
+                Due date is required and must be a future date
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Priority</label>
+              <select formControlName="priority">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Types Modal -->
+  <div class="modal" *ngIf="showEditTypesModal">
+    <div class="modal-content edit-types-modal">
+      <div class="modal-header">
+        <h2>Edit types</h2>
+        <button class="close-btn" (click)="closeEditTypesModal()">×</button>
+      </div>
+
+      <div class="types-header">
+        <span>Display in</span>
+        <div class="header-tabs">
+          <button class="tab" [class.active]="editTypesActiveTab === 'tasks'" (click)="setEditTypesTab('tasks')">
+            Tasks
+          </button>
+          <button class="tab" [class.active]="editTypesActiveTab === 'events'" (click)="setEditTypesTab('events')">
+            Events
+          </button>
+        </div>
+      </div>
+
+      <div class="types-list">
+        <div class="type-row" *ngFor="let type of taskTypes; trackBy: trackByTypeId">
+          <div class="type-info">
+            <div class="type-color" [style.background-color]="type.color"></div>
+            <input type="text" [value]="type.name" (input)="updateTypeName(type, $any($event.target).value)"
+              class="type-name-input" [style.color]="type.color" />
+          </div>
+
+          <div class="type-checkboxes">
+            <!-- Tasks checkbox -->
+            <label class="checkbox-wrapper">
+              <input type="checkbox" [checked]="type.forTasks" (change)="toggleTypeForTasks(type)"
+                class="custom-checkbox" />
+              <span class="checkmark"></span>
+            </label>
+
+            <!-- Events checkbox -->
+            <label class="checkbox-wrapper">
+              <input type="checkbox" [checked]="type.forEvents" (change)="toggleTypeForEvents(type)"
+                class="custom-checkbox" />
+              <span class="checkmark"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="cancel-btn" (click)="closeEditTypesModal()">Cancel</button>
+        <button type="button" class="save-btn" (click)="saveTaskTypes()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Panel for Editing Tasks -->
+  <div class="side-panel-overlay" *ngIf="showTaskModal && editingTask" (click)="closeTaskModal()"></div>
+  <div class="side-panel" [class.side-panel-open]="showTaskModal && editingTask">
+    <div class="side-panel-header">
+      <div class="task-icon">📝</div>
+      <div class="task-title-section">
+        <input type="text" [formControl]="titleControl" class="task-title-input" />
+        <div class="task-meta">
+          <span class="task-status">{{ getCurrentColumnTitle() }}</span>
+          <div class="task-type-badge" [style.background-color]="getSelectedTaskType().color">
+            {{ getSelectedTaskType().name }}
+          </div>
+        </div>
+      </div>
+      <button class="close-panel-btn" (click)="closeTaskModal()">×</button>
+    </div>
+
+    <div class="side-panel-content">
+      <!-- Main Task Details -->
+      <div class="task-details-section">
+        <div class="detail-group">
+          <div class="detail-label">Status</div>
+          <select [formControl]="statusIdControl" class="detail-select">
+            <option *ngFor="let c of columns" [value]="c.id">{{ c.title }}</option>
+          </select>
+        </div>
+
+        <div class="detail-row">
+          <div class="detail-group">
+            <div class="detail-label">Type</div>
+            <div class="type-selector-compact" (click)="toggleTypeDropdown()">
+              <div class="type-badge" [style.background-color]="getSelectedTaskType().color">
+                {{ getSelectedTaskType().name }}
+              </div>
+              <!-- Type Dropdown -->
+              <div class="type-dropdown-compact" *ngIf="showTypeDropdown">
+                <div class="type-option" *ngFor="let type of getEnabledTaskTypes()" (click)="selectTaskType(type)"
+                  [style.background-color]="type.color">
+                  {{ type.name }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-group">
+            <div class="detail-label">Due date</div>
+            <input type="date" [formControl]="dueDateControl" class="detail-input" />
+          </div>
+        </div>
+
+        <div class="detail-group">
+          <div class="detail-label">Assignee</div>
+          <div class="assignee-selector">
+            <div class="assignee-avatar">
+              <span class="avatar-text">{{ getAssigneeInitials() }}</span>
+            </div>
+            <input type="text" [formControl]="assigneeControl" class="assignee-input" placeholder="Me" />
+          </div>
+        </div>
+
+        <div class="detail-group">
+          <div class="detail-label">Estimated time</div>
+          <div class="time-input-wrapper">
+            <span class="time-icon">⏱</span>
+            <input type="number" [formControl]="estimatedTimeHoursControl" class="time-input" placeholder="0h" />
+          </div>
+        </div>
+
+        <div class="detail-group">
+          <div class="detail-label">Priority</div>
+          <select [formControl]="priorityControl" class="priority-select">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="task-actions-bar">
+          <button class="action-btn" (click)="addSubtask()">
+            <span class="btn-icon">✓</span>
+            Add subtask
+          </button>
+          <button class="action-btn" (click)="attachFile()">
+            <span class="btn-icon">📎</span>
+            Attach file
+          </button>
+          <button class="action-btn" (click)="startTimer()">
+            <span class="btn-icon">▶</span>
+            Start timer
+          </button>
+          <button class="action-btn" (click)="logTime()">
+            <span class="btn-icon">⏱</span>
+            Log time
+          </button>
+          <button class="action-btn more-btn">
+            <span class="btn-icon">⋯</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Description Section -->
+      <div class="description-section">
+        <div class="section-header">
+          <span class="section-icon">📄</span>
+          <span class="section-title">Description</span>
+        </div>
+        <textarea [formControl]="descriptionControl" class="description-textarea"
+          placeholder="Add a description..."></textarea>
+      </div>
+
+      <!-- Scheduled Work Section -->
+      <div class="scheduled-section" *ngIf="taskForm.get('scheduleDate')?.value">
+        <div class="section-header">
+          <span class="section-icon">📅</span>
+          <span class="section-title">Scheduled work</span>
+          <span class="scheduled-count">1</span>
+        </div>
+        <div class="scheduled-item">
+          <div class="scheduled-date">
+            <span class="date-day">{{ getScheduledDay() }}</span>
+            <span class="date-month">{{ getScheduledMonth() }}</span>
+          </div>
+          <div class="scheduled-details">
+            <div class="scheduled-user">
+              <span class="user-avatar">{{ getAssigneeInitials() }}</span>
+              <span>{{ taskForm.get('assignee')?.value || 'Me' }}</span>
+            </div>
+            <div class="scheduled-time">{{ taskForm.get('estimatedTimeHours')?.value || 0 }}h</div>
+          </div>
+          <!-- <button class="timer-btn" (click)="startScheduledTimer()">
+            <span class="timer-icon">▶</span>
+            00:00:00
+          </button> -->
+        </div>
+      </div>
+
+      <!-- Comments Section -->
+      <div class="comments-section">
+        <div class="section-header">
+          <span class="section-icon">💬</span>
+          <span class="section-title">Comments</span>
+        </div>
+
+        <!-- Add Comment -->
+        <div class="add-comment">
+          <div class="comment-avatar">
+            <span class="avatar-text">{{ getCurrentUserInitials() }}</span>
+          </div>
+          <div class="comment-input-wrapper">
+            <textarea [(ngModel)]="newComment" placeholder="Write a comment..." class="comment-textarea"
+              (keydown.enter)="addComment($event)"></textarea>
+            <div class="comment-actions" *ngIf="newComment?.trim()">
+              <button class="comment-btn save" (click)="addComment()">Save</button>
+              <button class="comment-btn cancel" (click)="cancelComment()">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comments List -->
+        <div class="comments-list">
+          <div class="comment" *ngFor="let comment of currentTaskComments; trackBy: trackByCommentId">
+            <div class="comment-avatar">
+              <span class="avatar-text">{{ getCommentUserInitials(comment) }}</span>
+            </div>
+            <div class="comment-content">
+              <div class="comment-header">
+                <span class="comment-author">{{ comment.author }}</span>
+                <span class="comment-date">{{ comment.createdAt | date:'MMM d, y \'at\' h:mm a' }}</span>
+                <div class="comment-menu" *ngIf="comment.canEdit">
+                  <button class="comment-menu-btn" (click)="toggleCommentMenu(comment.id)">⋯</button>
+                  <div class="comment-dropdown" *ngIf="comment.showMenu">
+                    <button (click)="editComment(comment)">Edit</button>
+                    <button (click)="deleteComment(comment)" class="delete">Delete</button>
+                  </div>
+                </div>
+              </div>
+              <div class="comment-text" [innerHTML]="comment.text"></div>
+              <div class="comment-actions">
+                <button class="comment-action" (click)="likeComment(comment)">
+                  <span [class]="comment.liked ? 'liked' : ''">👍</span>
+                  <span *ngIf="comment.likes > 0">{{ comment.likes }}</span>
                 </button>
+                <button class="comment-action" (click)="replyToComment(comment)">Reply</button>
               </div>
             </div>
-
-            <div class="right-col">
-              <div class="form-group" *ngIf="!currentColumn">
-                <label>Status</label>
-                <select formControlName="statusId">
-                  <option *ngFor="let c of columns" [value]="c.id">{{ c.title }}</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label>Type</label>
-                <div class="type-selector" (click)="toggleTypeDropdown()">
-                  <div class="selected-type" [style.background-color]="getSelectedTaskType().color">
-                    {{ getSelectedTaskType().name }}
-                    <span class="dropdown-arrow">▼</span>
-                  </div>
-
-                  <!-- Type Dropdown -->
-                  <div class="type-dropdown" *ngIf="showTypeDropdown">
-                    <div class="type-option" *ngFor="let type of getEnabledTaskTypes()" (click)="selectTaskType(type)"
-                      [style.background-color]="type.color">
-                      {{ type.name }}
-                    </div>
-
-                    <div class="edit-types-option" (click)="openEditTypesModal()">
-                      <span class="edit-icon">⚙</span>
-                      Edit types
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Edit Types Modal -->
-              <div class="modal" *ngIf="showEditTypesModal">
-                <div class="modal-content edit-types-modal">
-                  <div class="modal-header">
-                    <h2>Edit types</h2>
-                    <button class="close-btn" (click)="closeEditTypesModal()">×</button>
-                  </div>
-
-                  <div class="types-header">
-                    <span>Display in</span>
-                    <div class="header-tabs">
-                      <button class="tab" [class.active]="editTypesActiveTab === 'tasks'"
-                        (click)="setEditTypesTab('tasks')">
-                        Tasks
-                      </button>
-                      <button class="tab" [class.active]="editTypesActiveTab === 'events'"
-                        (click)="setEditTypesTab('events')">
-                        Events
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="types-list">
-                    <div class="type-row" *ngFor="let type of taskTypes; trackBy: trackByTypeId">
-                      <div class="type-info">
-                        <div class="type-color" [style.background-color]="type.color"></div>
-                        <input type="text" [value]="type.name" (input)="updateTypeName(type, $any($event.target).value)"
-                          class="type-name-input" [style.color]="type.color" />
-                      </div>
-
-                      <div class="type-checkboxes">
-                        <!-- Tasks checkbox -->
-                        <label class="checkbox-wrapper">
-                          <input type="checkbox" [checked]="type.forTasks" (change)="toggleTypeForTasks(type)"
-                            class="custom-checkbox" />
-                          <span class="checkmark"></span>
-                        </label>
-
-                        <!-- Events checkbox -->
-                        <label class="checkbox-wrapper">
-                          <input type="checkbox" [checked]="type.forEvents" (change)="toggleTypeForEvents(type)"
-                            class="custom-checkbox" />
-                          <span class="checkmark"></span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="modal-actions">
-                    <button type="button" class="cancel-btn" (click)="closeEditTypesModal()">Cancel</button>
-                    <button type="button" class="save-btn" (click)="saveTaskTypes()">Save</button>
-                  </div>
-                </div>
-              </div>
-
-
-              <div class="form-group">
-                <label>Assignee</label>
-                <input type="text" formControlName="assignee" placeholder="Me" />
-                <div class="validation-error"
-                  *ngIf="taskForm.get('assignee')?.invalid && taskForm.get('assignee')?.touched">
-                  Assignee name must be between 2 and 50 characters
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Schedule</label>
-                  <input type="date" formControlName="scheduleDate" />
-                </div>
-                <div class="form-group">
-                  <label>Estimated time</label>
-                  <input type="number" min="0" formControlName="estimatedTimeHours" placeholder="0h" />
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Due date</label>
-                  <input type="date" formControlName="dueDate" />
-                  <div class="validation-error"
-                    *ngIf="taskForm.get('dueDate')?.invalid && taskForm.get('dueDate')?.touched">
-                    Due date is required and must be a future date
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label>Priority</label>
-                  <select formControlName="priority">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>
-    <div *ngIf="activeTool==='calendar'" class="kanban-container">
-      <app-calendar></app-calendar>
+
+    <div class="side-panel-footer">
+      <button class="footer-btn cancel" (click)="closeTaskModal()">Cancel</button>
+      <button class="footer-btn save" (click)="saveTask()">Save changes</button>
     </div>
   </div>
 </div>

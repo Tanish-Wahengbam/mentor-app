@@ -8,6 +8,7 @@ import {
   FormsModule,
   AbstractControl,
   ValidationErrors,
+  FormControl,
 } from '@angular/forms';
 import {
   CdkDragDrop,
@@ -18,7 +19,6 @@ import {
 import { CalendarComponent } from './calendar.component';
 
 type Priority = 'low' | 'medium' | 'high';
-
 
 interface Task {
   id: string;
@@ -31,6 +31,7 @@ interface Task {
   scheduleDate?: string | null;
   type?: string;
 }
+
 interface TaskType {
   id: string;
   name: string;
@@ -39,10 +40,22 @@ interface TaskType {
   forTasks: boolean;
   forEvents: boolean;
 }
+
 interface Column {
   id: string;
   title: string;
   tasks: Task[];
+}
+
+interface Comment {
+  id: string;
+  text: string;
+  author: string;
+  createdAt: Date;
+  canEdit: boolean;
+  liked: boolean;
+  likes: number;
+  showMenu: boolean;
 }
 
 @Component({
@@ -76,7 +89,11 @@ export class AppComponent implements OnInit {
     { id: 'type2', name: 'Type 2', color: '#20c997', enabled: false, forTasks: false, forEvents: true }
   ];
   showTypeDropdown = false;
-  editTypesActiveTab = 'tasks'; // Track active tab
+  editTypesActiveTab = 'tasks';
+
+  // Comments
+  newComment: string = '';
+  currentTaskComments: Comment[] = [];
 
   constructor(private fb: FormBuilder) {
     this.taskForm = this.fb.group({
@@ -122,6 +139,7 @@ export class AppComponent implements OnInit {
   trackByTypeId(index: number, type: TaskType): string {
     return type.id;
   }
+
   getTaskTypeColor(task: Task): string {
     const taskType = this.taskTypes.find(t => t.id === (task.type || 'operational'));
     return taskType ? taskType.color : '#2f6fec';
@@ -132,17 +150,14 @@ export class AppComponent implements OnInit {
     return taskType ? taskType.name : 'Operational';
   }
 
-  // Helper to get lighter version of color for background
   getTaskTypeBackgroundColor(task: Task): string {
     const color = this.getTaskTypeColor(task);
-    // Convert hex to rgba with opacity
     const hex = color.replace('#', '');
     const r = parseInt(hex.substr(0, 2), 16);
     const g = parseInt(hex.substr(2, 2), 16);
     const b = parseInt(hex.substr(4, 2), 16);
     return `rgba(${r}, ${g}, ${b}, 0.1)`;
   }
-
 
   futureDateValidator() {
     return (control: AbstractControl): ValidationErrors | null => {
@@ -157,7 +172,7 @@ export class AppComponent implements OnInit {
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: Event) {
     const target = event.target as HTMLElement;
-    if (!target.closest('.type-selector')) {
+    if (!target.closest('.type-selector') && !target.closest('.type-selector-compact')) {
       this.showTypeDropdown = false;
     }
   }
@@ -227,8 +242,9 @@ export class AppComponent implements OnInit {
       statusId: column.id,
       estimatedTimeHours: task.estimatedTimeHours ?? 0,
       scheduleDate: task.scheduleDate ?? null,
-      type: task.type ?? 'operational' // Include type
+      type: task.type ?? 'operational'
     });
+    this.loadTaskComments();
     this.showTaskModal = true;
     document.body.classList.add('modal-open');
   }
@@ -240,13 +256,15 @@ export class AppComponent implements OnInit {
     }
 
     const v = this.taskForm.value;
-    const destinationColumnId =
-      this.currentColumn?.id ?? v.statusId ?? this.selectedStatusId ?? this.columns[0]?.id;
+    const destinationColumnId = this.currentColumn?.id ?? v.statusId ?? this.selectedStatusId ?? this.columns[0]?.id;
 
     let destinationColumn = this.columns.find(c => c.id === destinationColumnId);
     if (!destinationColumn) destinationColumn = this.columns[0];
 
     if (this.editingTask) {
+      // Move task to new column if status changed
+      const originalColumn = this.columns.find(c => c.tasks.includes(this.editingTask!));
+      
       Object.assign(this.editingTask, {
         title: v.title,
         description: v.description,
@@ -255,8 +273,16 @@ export class AppComponent implements OnInit {
         assignee: v.assignee,
         estimatedTimeHours: v.estimatedTimeHours,
         scheduleDate: v.scheduleDate,
-        type: v.type // Make sure this is included
+        type: v.type
       });
+
+      if (originalColumn && destinationColumn && destinationColumn.id !== originalColumn.id) {
+        const fromIndex = originalColumn.tasks.indexOf(this.editingTask);
+        if (fromIndex > -1) {
+          originalColumn.tasks.splice(fromIndex, 1);
+          destinationColumn.tasks.push(this.editingTask);
+        }
+      }
     } else {
       const newTask: Task = {
         id: crypto.randomUUID?.() ?? Date.now().toString(),
@@ -267,7 +293,7 @@ export class AppComponent implements OnInit {
         assignee: v.assignee,
         estimatedTimeHours: v.estimatedTimeHours,
         scheduleDate: v.scheduleDate,
-        type: v.type // Make sure this is included
+        type: v.type
       };
       destinationColumn.tasks.push(newTask);
     }
@@ -276,13 +302,14 @@ export class AppComponent implements OnInit {
     this.closeTaskModal();
   }
 
-
   closeTaskModal() {
     this.showTaskModal = false;
     this.editingTask = null;
     this.currentColumn = null;
     this.taskForm.reset();
     this.selectedStatusId = null;
+    this.newComment = '';
+    this.currentTaskComments = [];
     document.body.classList.remove('modal-open');
   }
 
@@ -354,10 +381,6 @@ export class AppComponent implements OnInit {
     document.body.classList.remove('modal-open');
   }
 
-  toggleTypeEnabled(type: any) {
-    type.enabled = !type.enabled;
-  }
-
   setEditTypesTab(tab: string) {
     this.editTypesActiveTab = tab;
   }
@@ -378,10 +401,8 @@ export class AppComponent implements OnInit {
   }
 
   saveTaskTypes() {
-    // Save to localStorage
     localStorage.setItem('taskTypes', JSON.stringify(this.taskTypes));
     this.closeEditTypesModal();
-    console.log('Task types saved:', this.taskTypes);
   }
 
   loadTaskTypes() {
@@ -389,11 +410,172 @@ export class AppComponent implements OnInit {
     if (saved) {
       try {
         this.taskTypes = JSON.parse(saved);
-        console.log('Task types loaded:', this.taskTypes);
       } catch (error) {
         console.error('Error loading task types:', error);
-        // Keep default types if error
       }
     }
+  }
+
+  // Side panel helper methods
+  getCurrentColumnTitle(): string {
+    if (this.currentColumn) return this.currentColumn.title;
+    const statusId = this.taskForm.get('statusId')?.value;
+    const column = this.columns.find(c => c.id === statusId);
+    return column?.title || 'New task';
+  }
+
+  getAssigneeInitials(): string {
+    const assignee = this.taskForm.get('assignee')?.value || 'Me';
+    return assignee.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  getCurrentUserInitials(): string {
+    return 'TW';
+  }
+
+  getScheduledDay(): string {
+    const date = this.taskForm.get('scheduleDate')?.value;
+    return date ? new Date(date).getDate().toString() : '';
+  }
+
+  getScheduledMonth(): string {
+    const date = this.taskForm.get('scheduleDate')?.value;
+    return date ? new Date(date).toLocaleDateString('en-US', { month: 'short' }) : '';
+  }
+
+  // Comment methods
+// Update the method signature
+addComment(event?: Event) {
+  // Cast to KeyboardEvent if it's a keyboard event
+  if (event instanceof KeyboardEvent) {
+    if (!event.ctrlKey) return; // Only submit on Ctrl+Enter for keyboard events
+  }
+  
+  if (!this.newComment?.trim()) return;
+
+  const comment: Comment = {
+    id: crypto.randomUUID?.() ?? Date.now().toString(),
+    text: this.newComment.trim(),
+    author: 'Tanish Wahangbam',
+    createdAt: new Date(),
+    canEdit: true,
+    liked: false,
+    likes: 0,
+    showMenu: false
+  };
+
+  this.currentTaskComments.push(comment);
+  this.newComment = '';
+  this.saveTaskComments();
+}
+
+
+  cancelComment() {
+    this.newComment = '';
+  }
+
+  trackByCommentId(index: number, comment: Comment): string {
+    return comment.id;
+  }
+
+  getCommentUserInitials(comment: Comment): string {
+    return comment.author.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  toggleCommentMenu(commentId: string) {
+    this.currentTaskComments.forEach(c => {
+      c.showMenu = c.id === commentId ? !c.showMenu : false;
+    });
+  }
+
+  editComment(comment: Comment) {
+    comment.showMenu = false;
+  }
+
+  deleteComment(comment: Comment) {
+    const index = this.currentTaskComments.findIndex(c => c.id === comment.id);
+    if (index > -1) {
+      this.currentTaskComments.splice(index, 1);
+      this.saveTaskComments();
+    }
+  }
+
+  likeComment(comment: Comment) {
+    comment.liked = !comment.liked;
+    comment.likes += comment.liked ? 1 : -1;
+    this.saveTaskComments();
+  }
+
+  replyToComment(comment: Comment) {
+    // Implement reply functionality
+  }
+
+  private saveTaskComments() {
+    if (this.editingTask) {
+      const key = `task-comments-${this.editingTask.id}`;
+      localStorage.setItem(key, JSON.stringify(this.currentTaskComments));
+    }
+  }
+
+  private loadTaskComments() {
+    if (this.editingTask) {
+      const key = `task-comments-${this.editingTask.id}`;
+      const saved = localStorage.getItem(key);
+      this.currentTaskComments = saved ? JSON.parse(saved) : [];
+    }
+  }
+
+  get titleControl(): FormControl {
+    return this.taskForm.get('title') as FormControl;
+  }
+  
+  get descriptionControl(): FormControl {
+    return this.taskForm.get('description') as FormControl;
+  }
+
+  get dueDateControl(): FormControl {
+    return this.taskForm.get('dueDate') as FormControl;
+  }
+  
+  get assigneeControl(): FormControl {
+    return this.taskForm.get('assignee') as FormControl;
+  }
+  
+  get statusIdControl(): FormControl {
+    return this.taskForm.get('statusId') as FormControl;
+  }
+  
+  get priorityControl(): FormControl {
+    return this.taskForm.get('priority') as FormControl;
+  }
+  
+  get estimatedTimeHoursControl(): FormControl {
+    return this.taskForm.get('estimatedTimeHours') as FormControl;
+  }
+  
+  get typeControl(): FormControl {
+    return this.taskForm.get('type') as FormControl;
+  }
+  
+
+  // Action button methods
+  addSubtask() {
+    console.log('Add subtask clicked');
+  }
+
+  attachFile() {
+    console.log('Attach file clicked');
+  }
+
+  startTimer() {
+    console.log('Start timer clicked');
+  }
+
+  logTime() {
+    console.log('Log time clicked');
+  }
+
+  startScheduledTimer() {
+    console.log('Start scheduled timer clicked');
   }
 }
