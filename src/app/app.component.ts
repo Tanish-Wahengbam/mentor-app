@@ -118,7 +118,7 @@ export class AppComponent implements OnInit {
   initializeBoard() {
     const defaultColumns: Column[] = [
       { id: 'new', title: 'New task', tasks: [] },
-      { id: 'scheduled', title: 'Scheduled', tasks: [] },
+      // { id: 'scheduled', title: 'Scheduled', tasks: [] },
       { id: 'inprogress', title: 'In Progress', tasks: [] },
       { id: 'completed', title: 'Completed', tasks: [] },
     ];
