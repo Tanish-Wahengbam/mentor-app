@@ -129,7 +129,79 @@ export class AppComponent implements OnInit {
     const savedBoard = localStorage.getItem('kanbanBoard');
     if (savedBoard) {
       this.columns = JSON.parse(savedBoard);
+    } else {
+      // No saved data, create default tasks
+      this.createDefaultTasks();
     }
+  }
+
+  createDefaultTasks() {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const defaultTasks: Task[] = [
+      {
+        id: 'default-1',
+        title: 'Welcome to Your Kanban Board! 🎉',
+        description: 'This is a sample task to help you get started. You can edit or delete this task and create new ones. Drag tasks between columns to update their status.',
+        priority: 'medium',
+        dueDate: tomorrow.toISOString().split('T')[0],
+        assignee: 'You',
+        estimatedTimeHours: 1,
+        scheduleDate: null,
+        type: 'operational'
+      },
+      {
+        id: 'default-2',
+        title: 'Explore the Calendar View 📅',
+        description: 'Click on the Calendar tab in the sidebar to see your tasks in a weekly calendar view. You can drag tasks between days to reschedule them.',
+        priority: 'low',
+        dueDate: tomorrow.toISOString().split('T')[0],
+        assignee: 'You',
+        estimatedTimeHours: 0.5,
+        scheduleDate: today.toISOString().split('T')[0],
+        type: 'technical'
+      },
+      {
+        id: 'default-3',
+        title: 'Customize Task Types 🎨',
+        description: 'You can customize task types by clicking on a task type and selecting "Edit types" to add colors and categories.',
+        priority: 'low',
+        dueDate: tomorrow.toISOString().split('T')[0],
+        assignee: 'You',
+        estimatedTimeHours: 0.5,
+        scheduleDate: null,
+        type: 'strategic'
+      }
+    ];
+
+    // Add default tasks to the "New task" column
+    const newTaskColumn = this.columns.find(c => c.id === 'new');
+    if (newTaskColumn) {
+      newTaskColumn.tasks.push(...defaultTasks);
+    }
+
+    // Add a sample completed task
+    const completedTask: Task = {
+      id: 'default-completed',
+      title: 'Sample Completed Task ✅',
+      description: 'This is what a completed task looks like. Great job!',
+      priority: 'high',
+      dueDate: today.toISOString().split('T')[0],
+      assignee: 'You',
+      estimatedTimeHours: 2,
+      scheduleDate: null,
+      type: 'operational'
+    };
+
+    const completedColumn = this.columns.find(c => c.id === 'completed');
+    if (completedColumn) {
+      completedColumn.tasks.push(completedTask);
+    }
+
+    // Save the default board to localStorage
+    this.saveToLocalStorage();
   }
 
   saveToLocalStorage() {
@@ -444,31 +516,29 @@ export class AppComponent implements OnInit {
   }
 
   // Comment methods
-// Update the method signature
-addComment(event?: Event) {
-  // Cast to KeyboardEvent if it's a keyboard event
-  if (event instanceof KeyboardEvent) {
-    if (!event.ctrlKey) return; // Only submit on Ctrl+Enter for keyboard events
+  addComment(event?: Event) {
+    // Cast to KeyboardEvent if it's a keyboard event
+    if (event instanceof KeyboardEvent) {
+      if (!event.ctrlKey) return; // Only submit on Ctrl+Enter for keyboard events
+    }
+    
+    if (!this.newComment?.trim()) return;
+
+    const comment: Comment = {
+      id: crypto.randomUUID?.() ?? Date.now().toString(),
+      text: this.newComment.trim(),
+      author: 'Tanish Wahangbam',
+      createdAt: new Date(),
+      canEdit: true,
+      liked: false,
+      likes: 0,
+      showMenu: false
+    };
+
+    this.currentTaskComments.push(comment);
+    this.newComment = '';
+    this.saveTaskComments();
   }
-  
-  if (!this.newComment?.trim()) return;
-
-  const comment: Comment = {
-    id: crypto.randomUUID?.() ?? Date.now().toString(),
-    text: this.newComment.trim(),
-    author: 'Tanish Wahangbam',
-    createdAt: new Date(),
-    canEdit: true,
-    liked: false,
-    likes: 0,
-    showMenu: false
-  };
-
-  this.currentTaskComments.push(comment);
-  this.newComment = '';
-  this.saveTaskComments();
-}
-
 
   cancelComment() {
     this.newComment = '';
@@ -525,6 +595,7 @@ addComment(event?: Event) {
     }
   }
 
+  // Form Control Getters
   get titleControl(): FormControl {
     return this.taskForm.get('title') as FormControl;
   }
@@ -556,7 +627,6 @@ addComment(event?: Event) {
   get typeControl(): FormControl {
     return this.taskForm.get('type') as FormControl;
   }
-  
 
   // Action button methods
   addSubtask() {

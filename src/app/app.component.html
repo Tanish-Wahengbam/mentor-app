@@ -46,12 +46,12 @@
   <div class="main-content" [class.content-expanded]="!sidenavOpen">
     <div *ngIf="activeTool==='tasks'" class="kanban-container">
       <div class="board-header">
-        <div class="left">
+        <!-- <div class="left">
           <button class="add-new-btn" (click)="openAddNewModal()">+ Add new</button>
-        </div>
-        <div class="right">
+        </div> -->
+        <!-- <div class="right">
           <button (click)="openNewColumnModal()" class="add-column-btn">Add Column</button>
-        </div>
+        </div> -->
       </div>
 
       <div class="board-content" cdkDropListGroup>
@@ -88,7 +88,7 @@
             </div>
           </div>
 
-          <button class="add-task-btn" (click)="openNewTaskModal(column)">+ Add Task</button>
+          <!-- <button class="add-task-btn" (click)="openNewTaskModal(column)">+ Add Task</button> -->
         </div>
       </div>
     </div>
