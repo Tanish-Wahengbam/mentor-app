@@ -1,16 +1,18 @@
 {
     "version": 2,
     "builds": [
-      {
-        "src": "dist/mentorApp/**",
-        "use": "@vercel/static"
-      }
+        {
+            "src": "package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "dist/angular-app/browser"
+            }
+        }
     ],
     "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/index.html"
-      }
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
+        }
     ]
-  }
-  
+}
