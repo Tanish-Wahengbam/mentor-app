@@ -1,0 +1,80 @@
+<div class="calendar-wrapper">
+  <div class="calendar-toolbar">
+    <div class="left">
+      <button (click)="prevWeek()">‹</button>
+      <button (click)="today()">Today</button>
+      <button (click)="nextWeek()">›</button>
+    </div>
+    <div class="center">
+      <div class="month-label" (click)="toggleDatePicker()" title="Pick a date">{{ days[0] | date:'MMMM y' }}</div>
+      <div class="date-picker" *ngIf="showDatePicker">
+        <div class="dp-header">
+          <button (click)="prevMonth()" class="dp-btn">‹</button>
+          <div class="title">{{ monthLabel }}</div>
+          <button (click)="nextMonth()" class="dp-btn">›</button>
+        </div>
+        <div class="dp-grid">
+          <div class="dow" *ngFor="let d of ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']">{{ d }}</div>
+          <button class="day"
+                  *ngFor="let d of monthGrid"
+                  [class.muted]="!isSameMonth(d)"
+                  [class.today]="isToday(d)"
+                  (click)="selectDate(d)">{{ d.getDate() }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="week-grid" cdkDropListGroup>
+    <div class="day-column" *ngFor="let day of days; let i = index" cdkDropList [id]="'day-' + i"
+         [cdkDropListConnectedTo]="dayDropListIds" [cdkDropListData]="dayTasks[i]" (cdkDropListDropped)="onDrop($event, i)">
+      <div class="day-header">
+        <div class="dow">{{ day | date:'EEE' }}</div>
+        <div class="date">{{ day | date:'d' }}</div>
+      </div>
+
+      <div class="events">
+        <button class="add-btn" (click)="openAddTask(i)">+ Add</button>
+        <div class="card" *ngFor="let t of dayTasks[i]; let ti = index" cdkDrag [cdkDragData]="t"
+             [style.border-left-color]="getTypeColor(t.typeId)">
+          <div class="title-row">
+            <div class="title">{{ t.title }}</div>
+            <button class="edit" (click)="openEditTask(t, i, ti)">Edit</button>
+          </div>
+          <div class="duration">{{ t.durationMinutes }}m</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Task Modal -->
+  <div class="modal" *ngIf="showTaskModal">
+    <div class="modal-content small">
+      <h3>{{ editingIndex === null ? 'Add task' : 'Edit task' }}</h3>
+      <div class="form-row">
+        <label>Title</label>
+        <input type="text" [(ngModel)]="formTitle" placeholder="Task title" />
+      </div>
+      <div class="form-two">
+        <div class="form-row">
+          <label>Duration (min)</label>
+          <input type="number" min="1" [(ngModel)]="formDuration" />
+        </div>
+        <div class="form-row">
+          <label>Type</label>
+          <div class="type-picker">
+            <span class="dot" [style.background-color]="getTypeColor(formTypeId)"></span>
+            <select [(ngModel)]="formTypeId">
+              <option *ngFor="let t of types" [value]="t.id" [style.color]="getTypeColor(t.id)"><span class="dot" [style.background-color]="getTypeColor(formTypeId)"></span>{{ t.name }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button (click)="closeTaskModal()" class="cancel-btn">Cancel</button>
+        <button class="primary" (click)="saveTaskFromModal()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
