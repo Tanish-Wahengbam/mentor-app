@@ -1,18 +1,24 @@
 {
     "version": 2,
     "builds": [
-        {
-            "src": "package.json",
-            "use": "@vercel/static-build",
-            "config": {
-                "distDir": "dist/angular-app/browser"
-            }
+      {
+        "src": "package.json",
+        "use": "@vercel/static-build",
+        "config": {
+          "distDir": "dist/angular-app/browser"
         }
+      }
     ],
     "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "/index.html"
-        }
+      { "src": "/assets/(.*)", "dest": "/assets/$1" },
+      { "src": "/favicon.ico", "dest": "/favicon.ico" },
+      { "src": "/main.(.*).js", "dest": "/main.$1.js" },
+      { "src": "/polyfills.(.*).js", "dest": "/polyfills.$1.js" },
+      { "src": "/runtime.(.*).js", "dest": "/runtime.$1.js" },
+      { "src": "/styles.(.*).css", "dest": "/styles.$1.css" },
+      { "src": "/(.*).js", "dest": "/$1.js" },
+      { "src": "/(.*).css", "dest": "/$1.css" },
+      { "src": "/(.*)", "dest": "/index.html" }
     ]
-}
+  }
+  
