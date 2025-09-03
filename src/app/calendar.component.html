@@ -26,8 +26,11 @@
   </div>
 
   <div class="week-grid" cdkDropListGroup>
-    <div class="day-column" *ngFor="let day of days; let i = index" cdkDropList [id]="'day-' + i"
-         [cdkDropListConnectedTo]="dayDropListIds" [cdkDropListData]="dayTasks[i]" (cdkDropListDropped)="onDrop($event, i)">
+    <div class="day-column" *ngFor="let day of days; let i = index" 
+         cdkDropList 
+         [id]="'day-' + i"
+         [cdkDropListData]="dayTasks[i]" 
+         (cdkDropListDropped)="onDrop($event, i)">
       <div class="day-header">
         <div class="dow">{{ day | date:'EEE' }}</div>
         <div class="date">{{ day | date:'d' }}</div>
@@ -35,7 +38,10 @@
 
       <div class="events">
         <button class="add-btn" (click)="openAddTask(i)">+ Add</button>
-        <div class="card" *ngFor="let t of dayTasks[i]; let ti = index" cdkDrag [cdkDragData]="t"
+        <div class="card" 
+             *ngFor="let t of dayTasks[i]; let ti = index; trackBy: trackByTaskId" 
+             cdkDrag 
+             [cdkDragData]="t"
              [style.border-left-color]="getTypeColor(t.typeId)">
           <div class="title-row">
             <div class="title">{{ t.title }}</div>
@@ -46,6 +52,7 @@
       </div>
     </div>
   </div>
+
   <!-- Task Modal -->
   <div class="modal" *ngIf="showTaskModal">
     <div class="modal-content small">
@@ -64,7 +71,7 @@
           <div class="type-picker">
             <span class="dot" [style.background-color]="getTypeColor(formTypeId)"></span>
             <select [(ngModel)]="formTypeId">
-              <option *ngFor="let t of types" [value]="t.id" [style.color]="getTypeColor(t.id)"><span class="dot" [style.background-color]="getTypeColor(formTypeId)"></span>{{ t.name }}</option>
+              <option *ngFor="let t of types" [value]="t.id">{{ t.name }}</option>
             </select>
           </div>
         </div>
@@ -76,5 +83,3 @@
     </div>
   </div>
 </div>
-
-

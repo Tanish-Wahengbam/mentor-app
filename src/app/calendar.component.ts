@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { FormsModule } from '@angular/forms';
@@ -6,7 +6,7 @@ import { FormsModule } from '@angular/forms';
 interface CalendarTask {
   id: string;
   title: string;
-  dayIndex: number; // 0=Mon ... 6=Sun
+  dayIndex: number;
   typeId: string;
   durationMinutes: number;
 }
@@ -23,11 +23,9 @@ export class CalendarComponent {
   days = this.buildDays(this.weekStart);
   dayTasks: CalendarTask[][] = Array.from({ length: 7 }).map(() => []);
 
-  // Date picker state
   showDatePicker = false;
   monthCursor = this.getMonthStart(new Date());
 
-  // Simple type catalog
   types = [
     { id: 'operational', name: 'Operational', color: '#2f6fec' },
     { id: 'technical', name: 'Technical', color: '#17a2b8' },
@@ -38,7 +36,6 @@ export class CalendarComponent {
     { id: 'interview', name: 'Interview', color: '#e83e8c' }
   ];
 
-  // Add/Edit task modal
   showTaskModal = false;
   modalDayIndex: number = 0;
   editingIndex: number | null = null;
@@ -46,7 +43,7 @@ export class CalendarComponent {
   formDuration = 15;
   formTypeId = 'operational';
 
-  constructor() {
+  constructor(private cdr: ChangeDetectorRef) {
     this.refreshCalendarFromStorage();
   }
 
@@ -55,85 +52,137 @@ export class CalendarComponent {
   }
 
   onDrop(event: CdkDragDrop<CalendarTask[]>, targetDayIndex: number) {
-    const droppedTask = event.item.data as CalendarTask;
-    const oldDayIndex = droppedTask.dayIndex;
+    const draggedTask = event.item.data as CalendarTask;
+    const sourceList = event.previousContainer.data;
+    const targetList = event.container.data;
+    const oldDayIndex = draggedTask.dayIndex;
     
+    console.log('🎯 DEBUG Drop Event:');
+    console.log('- Target Day Index (from template):', targetDayIndex);
+    console.log('- Previous Container:', event.previousContainer.id);
+    console.log('- Current Container:', event.container.id);
+    console.log('- Dragged Task:', draggedTask.title);
+    console.log('- Old Day Index:', oldDayIndex);
+
+    // Find the actual index of the dragged item in source list
+    const actualSourceIndex = sourceList.findIndex(task => task.id === draggedTask.id);
+    let actualTargetIndex = event.currentIndex;
+
+    // Clamp target index to prevent out-of-bounds
+    if (actualTargetIndex > targetList.length) {
+      actualTargetIndex = targetList.length;
+    }
+    if (actualTargetIndex < 0) {
+      actualTargetIndex = 0;
+    }
+
+    console.log('- Actual Source Index:', actualSourceIndex);
+    console.log('- Actual Target Index:', actualTargetIndex);
+
     if (event.previousContainer === event.container) {
-      moveItemInArray(event.container.data, event.previousIndex, event.currentIndex);
-      event.container.data.forEach(t => (t.dayIndex = targetDayIndex));
+      // Moving within same day - use actual indices
+      if (actualSourceIndex !== -1) {
+        sourceList.splice(actualSourceIndex, 1);
+        sourceList.splice(actualTargetIndex, 0, draggedTask);
+      }
     } else {
-      transferArrayItem(
-        event.previousContainer.data,
-        event.container.data,
-        event.previousIndex,
-        event.currentIndex
-      );
-      event.container.data.forEach(t => (t.dayIndex = targetDayIndex));
-      const prevId = this.extractDayIndex(event.previousContainer.id);
-      if (prevId !== null) {
-        event.previousContainer.data.forEach(t => (t.dayIndex = prevId));
+      // Moving between different days - use actual indices
+      if (actualSourceIndex !== -1) {
+        sourceList.splice(actualSourceIndex, 1);
+        targetList.splice(actualTargetIndex, 0, draggedTask);
       }
     }
-  
-    // Update the calendar task's dayIndex
-    droppedTask.dayIndex = targetDayIndex;
-  
-    // Update the original Kanban task's date if the day changed
-    if (oldDayIndex !== targetDayIndex) {
-      this.updateKanbanTaskDate(droppedTask, targetDayIndex);
+
+    // Update ALL tasks in both containers with correct day indices
+    targetList.forEach((task, index) => {
+      task.dayIndex = targetDayIndex + 1;
+      console.log(`- Updated target task "${task.title}" to day ${targetDayIndex}`);
+    });
+
+    if (event.previousContainer !== event.container) {
+      const sourceDayIndex = this.extractDayIndex(event.previousContainer.id);
+      if (sourceDayIndex !== null) {
+        sourceList.forEach((task, index) => {
+          task.dayIndex = sourceDayIndex;
+          console.log(`- Updated source task "${task.title}" to day ${sourceDayIndex}`);
+        });
+      }
+    }
+
+    // Force update the dragged task with target day
+    draggedTask.dayIndex = targetDayIndex + 1;
+
+    // Update date if moving to different day
+    if (oldDayIndex !== targetDayIndex + 1) {
+      console.log(`📅 Day changed: ${oldDayIndex} → ${targetDayIndex}`);
+      this.updateKanbanTaskDate(draggedTask, targetDayIndex + 1);
+      
+      // Force immediate refresh
+      this.cdr.detectChanges();
+      setTimeout(() => {
+        this.refreshCalendarFromStorage();
+        this.cdr.detectChanges();
+        console.log('✅ Calendar refreshed');
+      }, 100);
+    } else {
+      this.cdr.detectChanges();
     }
   }
-  
+
   private updateKanbanTaskDate(calendarTask: CalendarTask, newDayIndex: number) {
     try {
       const raw = localStorage.getItem('kanbanBoard');
-      if (!raw) return;
-  
+      if (!raw) {
+        console.warn('❌ No kanban data found');
+        return;
+      }
+
       const columns = JSON.parse(raw);
       let taskFound = false;
-  
-      // Calculate the new date based on week start and day index
-      const newDate = new Date(this.weekStart);
+
+      const newDate = new Date(this.weekStart.getTime());
       newDate.setDate(this.weekStart.getDate() + newDayIndex);
-      const newDateISO = newDate.toISOString().split('T')[0]; // YYYY-MM-DD format
-  
-      // Find and update the task in the Kanban data
-      for (const column of columns) {
-        if (column.tasks) {
+      const newDateISO = newDate.toISOString().split('T')[0];
+
+      console.log(`📅 Updating Kanban task "${calendarTask.title}" to ${newDateISO} (day ${newDayIndex})`);
+
+      outerLoop: for (const column of columns) {
+        if (column.tasks && Array.isArray(column.tasks)) {
           for (const task of column.tasks) {
-            if (String(task.id) === calendarTask.id) {
-              // Update the scheduleDate or dueDate
+            if (String(task.id) === String(calendarTask.id)) {
+              const oldDate = task.scheduleDate || task.dueDate || 'no date';
+              
               if (task.scheduleDate !== undefined) {
                 task.scheduleDate = newDateISO;
-              } else {
+              } else if (task.dueDate !== undefined) {
                 task.dueDate = newDateISO;
+              } else {
+                task.scheduleDate = newDateISO;
               }
+              
               taskFound = true;
-              console.log(`✅ Updated task "${task.title}" to ${newDateISO}`);
-              break;
+              console.log(`✅ Kanban task updated from ${oldDate} to ${newDateISO}`);
+              break outerLoop;
             }
           }
         }
-        if (taskFound) break;
       }
-  
+
       if (taskFound) {
-        // Save the updated data back to localStorage
         localStorage.setItem('kanbanBoard', JSON.stringify(columns));
+        console.log('💾 Saved to localStorage');
+      } else {
+        console.error(`❌ Task not found in Kanban: ${calendarTask.title}`);
       }
-  
+
     } catch (e) {
       console.error('Failed to update Kanban task date:', e);
     }
   }
-  
 
-  private showUpdateNotification(taskTitle: string, newDate: string) {
-    console.log(`✅ Updated "${taskTitle}" to ${newDate}`);
-  }
-
-  extractDayIndex(id: string): number | null {
-    const match = id.match(/day-(\d+)/);
+  extractDayIndex(containerId: string | null): number | null {
+    if (!containerId) return null;
+    const match = containerId.match(/^day-(\d+)$/);
     return match ? parseInt(match[1], 10) : null;
   }
 
@@ -161,7 +210,7 @@ export class CalendarComponent {
 
   private getStartOfWeek(date: Date): Date {
     const d = new Date(date);
-    const day = (d.getDay() + 6) % 7; // Mon=0
+    const day = (d.getDay() + 6) % 7;
     d.setDate(d.getDate() - day);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -175,7 +224,6 @@ export class CalendarComponent {
     });
   }
 
-  // Date picker helpers
   toggleDatePicker() {
     this.showDatePicker = !this.showDatePicker;
   }
@@ -204,7 +252,7 @@ export class CalendarComponent {
 
   get monthGrid(): Date[] {
     const first = new Date(this.monthCursor);
-    const startDow = (first.getDay() + 6) % 7; // Mon=0
+    const startDow = (first.getDay() + 6) % 7;
     const gridStart = new Date(first);
     gridStart.setDate(first.getDate() - startDow);
     const days: Date[] = [];
@@ -253,7 +301,7 @@ export class CalendarComponent {
 
   saveTaskFromModal() {
     const title = this.formTitle.trim();
-    if (!title) { return; }
+    if (!title) return;
     
     if (this.editingIndex === null) {
       const newTask: CalendarTask = {
@@ -298,9 +346,10 @@ export class CalendarComponent {
     return task.id;
   }
 
-  // Load tasks from Kanban localStorage and populate days by date
   refreshCalendarFromStorage() {
+    console.log('🔄 Refreshing calendar from storage...');
     this.dayTasks = Array.from({ length: 7 }).map(() => []);
+    
     try {
       const raw = localStorage.getItem('kanbanBoard');
       if (!raw) return;
@@ -332,12 +381,12 @@ export class CalendarComponent {
           }
         }
       }
+      
     } catch (e) {
       console.error('Calendar: failed to read kanban tasks', e);
     }
   }
 
-  // Format date for display
   formatDate(date: Date): string {
     return date.toLocaleDateString('en-US', { 
       weekday: 'short', 
@@ -351,45 +400,5 @@ export class CalendarComponent {
       month: 'short', 
       day: 'numeric' 
     });
-  }
-
-  // Optional: Add method to sync all changes back to Kanban
-  syncToKanban() {
-    try {
-      const raw = localStorage.getItem('kanbanBoard');
-      if (!raw) return;
-
-      const columns = JSON.parse(raw) as Array<{ id: string; title: string; tasks: any[] }>;
-      
-      // Update all tasks in dayTasks back to kanban
-      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-        for (const calendarTask of this.dayTasks[dayIndex]) {
-          const newDate = new Date(this.weekStart);
-          newDate.setDate(this.weekStart.getDate() + dayIndex);
-          const newDateISO = newDate.toISOString().split('T')[0];
-
-          for (const column of columns) {
-            for (const task of column.tasks || []) {
-              if (String(task.id) === calendarTask.id) {
-                if (task.scheduleDate) {
-                  task.scheduleDate = newDateISO;
-                } else if (task.dueDate) {
-                  task.dueDate = newDateISO;
-                } else {
-                  task.scheduleDate = newDateISO;
-                }
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      localStorage.setItem('kanbanBoard', JSON.stringify(columns));
-      console.log('Synced all calendar changes back to Kanban');
-
-    } catch (e) {
-      console.error('Failed to sync calendar to Kanban:', e);
-    }
   }
 }
